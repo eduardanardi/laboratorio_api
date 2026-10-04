@@ -11,9 +11,17 @@ O motor matemático original não possuía travas na porta de entrada da API.
 * **Handlers de Exceção:** Foi criado tratadores de erro para evitar que falhas de domínio (como divisões por zero ao enviar um inventário sem fluxos renováveis) gerassem o genérico "Erro 500". A API agora traduz essas falhas perfeitamente para o status 422, retornando um JSON estruturado com os cinco campos obrigatórios da RFC 9457 (`type`, `title`, `status`, `detail`, `instance`).
 
 ## 3. Passo 4: Resolução da "Rota-Armadilha"
-Na rota `/v1/demo/travada`. O uso de uma função bloqueante tradicional (`time.sleep`) dentro de uma declaração assíncrona (`async def`) paralisava todo o *event loop* do servidor, impedindo que até mesmo a documentação do Swagger carregasse no navegador.
-* **A Solução:** A correção foi feita removendo a palavra `async` da declaração da função. Com isso, o FastAPI compreendeu a natureza bloqueante da tarefa e passou a delegá-la para um *thread pool* em segundo plano, liberando a linha principal para continuar respondendo a novas requisições. 
-* Após a comprovação do funcionamento, o arquivo de demonstração (`rotas_demo.py`) foi apagado do repositório para manter a higiene do código, conforme exigido.
+Na rota `/v1/demo/travada`. O uso de uma função síncrona e bloqueante tradicional (`time.sleep()`) dentro de uma declaração assíncrona (`async def`) paralisava todo o *event loop* principal do servidor, impedindo que a aplicação respondesse a novas requisições (até mesmo a interface do Swagger ficava travada carregando).
+
+Para resolver esse travamento, havia duas opções de implementação na arquitetura do FastAPI:
+
+* **Opção 1 (A implementada no projeto): Remover a declaração `async`.** 
+Ao alterar a rota de `async def` para uma função síncrona normal (`def`), o FastAPI reconhece que a tarefa é bloqueante e a envia automaticamente para um *thread pool* em segundo plano gerenciado pelo Starlette. Isso libera o *event loop* principal imediatamente, permitindo que o servidor continue atendendo outros usuários sem travar.
+
+* **Opção 2 (A alternativa totalmente assíncrona): Substituir o bloqueio por `await asyncio.sleep()`.** 
+Se a intenção fosse manter a rota como `async def`, seria obrigatório trocar a biblioteca síncrona `time` pela biblioteca assíncrona `asyncio`. Assim, ao chegar no comando `await`, a função "devolve" o controle para o *event loop* atender outras requisições enquanto a espera acontece no fundo.
+
+Foi aplicado a primeira opção 1 para resolver o travamento. Após validar que a API voltou a responder normalmente, o arquivo inteiro de demonstração (`rotas_demo.py`) foi excluído do repositório para manter a higiene da base de código, cumprindo as diretrizes do projeto.
 
 ## 4. Passo 5: Testes Automatizados e Limites do Motor Matemático
 A etapa final focou na automação dos testes em Pytest (`test_tarefas_aluno.py`), avaliando a precisão do núcleo matemático isolado da infraestrutura web.
